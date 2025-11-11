@@ -2,47 +2,35 @@ import { useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Clock, Filter } from 'lucide-react';
+import { Search, Clock, Filter, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// Mock data para quando pesquisar um usuário
-const mockUserData = {
-  '@mariana_beauty': {
-    username: '@mariana_beauty',
-    totalInteractions: 47,
-    sentiment: {
-      positive: 85,
-      neutral: 10,
-      negative: 5,
-    },
-    lastEngagement: '2 horas atrás',
-    interactions: [
-      { id: 11, type: 'Comentário', date: '11.22', sentiment: 'positive', text: 'Amei essa base! Muito bom mesmo! A durabilidade é incrível 🎨', time: '14:32' },
-      { id: 10, type: 'Story Reply', date: '10.11', sentiment: 'neutral', text: 'Onde compro essa cor?', time: '09:15' },
-      { id: 9, type: 'Comentário', date: '09.11', sentiment: 'positive', text: 'Produto maravilhoso! Já é o terceiro que compro', time: '16:47' },
-      { id: 8, type: 'DM', date: '08.11', sentiment: 'neutral', text: 'Você fazem entrega para o interior?', time: '11:23' },
-      { id: 7, type: 'Comentário', date: '07.11', sentiment: 'positive', text: 'Adorei! Super recomendo 🔥', time: '20:08' },
-    ],
-  },
-};
+import { getUserProfile, UserProfile } from '@/services/dataService';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 type FilterType = 'todos' | 'positivos' | 'negativos' | 'nao-respondidos';
 
 export default function Monitor() {
   const [searchUser, setSearchUser] = useState('');
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [userData, setUserData] = useState<UserProfile | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('todos');
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchUser.trim()) {
-      // Simula busca - em produção, aqui seria uma chamada à API
+      // Busca usuário pelo @ usando dados reais da visão geral
       const normalizedSearch = searchUser.startsWith('@') ? searchUser : `@${searchUser}`;
-      setSelectedUser(normalizedSearch);
+      const profile = getUserProfile(normalizedSearch);
+      
+      if (profile) {
+        setUserData(profile);
+        setNotFound(false);
+      } else {
+        setUserData(null);
+        setNotFound(true);
+      }
     }
   };
-
-  const userData = selectedUser ? mockUserData[selectedUser as keyof typeof mockUserData] : null;
 
   const getInitials = (username: string) => {
     const name = username.replace('@', '');
@@ -101,7 +89,9 @@ export default function Monitor() {
               />
             </div>
           </form>
-          <p className="text-xs text-muted-foreground mt-2">Exemplo: @mariana_beauty</p>
+          <p className="text-xs text-muted-foreground mt-2">
+            Digite o @ de qualquer usuário da visão geral (ex: @ana_silva, @carlos.mendes, @mariana_beauty)
+          </p>
         </div>
 
         {/* Filtros */}
@@ -144,12 +134,24 @@ export default function Monitor() {
         )}
 
         {/* Estado vazio */}
-        {!userData && (
+        {!userData && !notFound && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Search className="w-16 h-16 text-muted-foreground/50 mb-4" />
             <h3 className="text-xl font-semibold mb-2">Insira um @ para começar a busca</h3>
-            <p className="text-muted-foreground max-w-md">Exemplo: @mariana_beauty</p>
+            <p className="text-muted-foreground max-w-md">
+              Busque por usuários da visão geral como: @ana_silva, @carlos.mendes, @maria_santos, @joaopedro, @bia_costa, @mariana_beauty
+            </p>
           </div>
+        )}
+
+        {/* Usuário não encontrado */}
+        {notFound && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Usuário não encontrado. Certifique-se de que o @ existe na base de dados da visão geral.
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Dados do usuário */}
@@ -159,10 +161,11 @@ export default function Monitor() {
             <div className="glass rounded-lg p-6">
               <div className="flex items-start gap-4 mb-6">
                 <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary text-xl font-semibold">{getInitials(userData.username)}</span>
+                  <span className="text-primary text-xl font-semibold">{getInitials(userData.instagram_handle)}</span>
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-2xl font-bold mb-1">{userData.username}</h2>
+                  <h2 className="text-2xl font-bold mb-1">{userData.instagram_handle}</h2>
+                  <p className="text-muted-foreground mb-2">{userData.name}</p>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div>
                       <span className="text-foreground font-medium">Total de Interações</span>
