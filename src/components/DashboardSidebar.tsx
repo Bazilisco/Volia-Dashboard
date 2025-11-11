@@ -7,7 +7,6 @@ import {
   BarChart3,
   Monitor,
   Terminal,
-  Settings,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -28,7 +27,6 @@ const navItems = [
   { icon: BarChart3, label: 'Analytics', path: '/dashboard/analytics' },
   { icon: Monitor, label: 'Monitor', path: '/dashboard/monitor' },
   { icon: Terminal, label: 'Console', path: '/dashboard/console' },
-  { icon: Settings, label: 'Settings', path: '/dashboard/settings' },
 ];
 
 export const DashboardSidebar = ({ collapsed, onToggle }: DashboardSidebarProps) => {
