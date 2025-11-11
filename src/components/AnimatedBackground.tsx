@@ -19,6 +19,9 @@ export const AnimatedBackground = () => {
 
     let animationFrame: number;
     let time = 0;
+    let lastFrameTime = 0;
+    const fps = 30; // Limit to 30fps for better performance
+    const frameDelay = 1000 / fps;
 
     // Single thin wave configuration - minimal and elegant
     const wave = {
@@ -28,7 +31,15 @@ export const AnimatedBackground = () => {
       yOffset: canvas.height * 0.4,
     };
 
-    const animate = () => {
+    const animate = (currentTime: number = 0) => {
+      // Throttle animation to target FPS
+      const elapsed = currentTime - lastFrameTime;
+      if (elapsed < frameDelay) {
+        animationFrame = requestAnimationFrame(animate);
+        return;
+      }
+      lastFrameTime = currentTime - (elapsed % frameDelay);
+
       // Absolute black background
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -36,9 +47,9 @@ export const AnimatedBackground = () => {
       // Draw the single elegant glow wave
       ctx.beginPath();
       
-      // Calculate wave points with smooth curve
+      // Calculate wave points with smooth curve - reduced points for performance
       const points: Array<{ x: number; y: number }> = [];
-      const numPoints = 100;
+      const numPoints = 50; // Reduced from 100
       
       for (let i = 0; i <= numPoints; i++) {
         const x = (canvas.width / numPoints) * i;

@@ -4,7 +4,7 @@ import { GlassCard } from '@/components/GlassCard';
 import { SatisfactionGauge } from '@/components/SatisfactionGauge';
 import { TrendingUp, Smile, Minus, Frown, MessageCircle, Instagram, Film, Image as ImageIcon } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo, useMemo } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const mockData = [
@@ -48,12 +48,12 @@ const topEngagers = [
   { id: 5, instagram_handle: '@maria_santos', name: 'Maria Santos', avatar: 'MS', interactions: 87, trend: '-2%' },
 ];
 
-const SentimentBars = () => {
-  const sentiments = [
+const SentimentBars = memo(() => {
+  const sentiments = useMemo(() => [
     { label: 'Positivo', value: 67, color: 'rgba(34, 197, 94, 0.6)' },
     { label: 'Neutro', value: 22, color: 'rgba(234, 179, 8, 0.6)' },
     { label: 'Negativo', value: 11, color: 'rgba(239, 68, 68, 0.6)' },
-  ];
+  ], []);
   
   return (
     <div className="space-y-6 w-full">
@@ -76,7 +76,7 @@ const SentimentBars = () => {
       ))}
     </div>
   );
-};
+});
 
 
 export default function Dashboard() {
@@ -125,7 +125,7 @@ export default function Dashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <MetricCard
             title="Total de Interações"
             value="12.500"
