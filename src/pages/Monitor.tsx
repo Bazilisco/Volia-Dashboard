@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { getUserProfile, UserProfile } from '@/services/dataService';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-type FilterType = 'todos' | 'positivos' | 'negativos' | 'nao-respondidos';
+type FilterType = 'todos' | 'positivos' | 'negativos';
 
 export default function Monitor() {
   const [searchUser, setSearchUser] = useState('');
@@ -122,14 +122,6 @@ export default function Monitor() {
             >
               Negativos
             </Button>
-            <Button
-              variant={activeFilter === 'nao-respondidos' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveFilter('nao-respondidos')}
-              className={cn(activeFilter === 'nao-respondidos' && 'bg-primary text-primary-foreground')}
-            >
-              Não Respondidos
-            </Button>
           </div>
         )}
 
@@ -239,7 +231,14 @@ export default function Monitor() {
             <div className="space-y-4">
               <h3 className="text-xl font-semibold">Histórico de Interações</h3>
               <div className="space-y-3">
-                {userData.interactions.map((interaction) => (
+                {userData.interactions
+                  .filter((interaction) => {
+                    if (activeFilter === 'todos') return true;
+                    if (activeFilter === 'positivos') return interaction.sentiment === 'positive';
+                    if (activeFilter === 'negativos') return interaction.sentiment === 'negative';
+                    return true;
+                  })
+                  .map((interaction) => (
                   <div
                     key={interaction.id}
                     className="glass rounded-lg p-4 hover:bg-primary/5 transition-colors border border-transparent hover:border-primary/20"
@@ -266,7 +265,7 @@ export default function Monitor() {
                       <span className="text-xs text-muted-foreground">{interaction.time}</span>
                     </div>
                   </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
