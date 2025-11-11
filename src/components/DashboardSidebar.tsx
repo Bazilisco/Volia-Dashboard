@@ -10,6 +10,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import voliaLogo from '@/assets/volia-logo.png';
@@ -45,6 +46,19 @@ export const DashboardSidebar = ({ collapsed, onToggle }: DashboardSidebarProps)
           <img src={voliaLogo} alt="VOLIA" className="h-10 w-auto mx-auto" />
         ) : (
           <img src={voliaLogoMini} alt="VOLIA" className="h-10 w-10 mx-auto object-contain" />
+        )}
+      </div>
+
+      {/* Volia Hub */}
+      <div className={cn(
+        "p-4 border-b border-white/20 flex items-center gap-3",
+        collapsed ? "justify-center" : ""
+      )}>
+        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+          <Sparkles className="w-5 h-5 text-primary" />
+        </div>
+        {!collapsed && (
+          <span className="text-lg font-semibold text-foreground">Volia Hub</span>
         )}
       </div>
 
