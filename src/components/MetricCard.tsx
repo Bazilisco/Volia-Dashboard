@@ -1,82 +1,66 @@
-import { ReactNode } from 'react';
-import { GlassCard } from './GlassCard';
-import { LucideIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 interface MetricCardProps {
   title: string;
   value: string | number;
-  change?: number;
-  icon: LucideIcon;
-  subtitle?: string;
-  trend?: ReactNode;
-  trendData?: Array<{ name: string; value: number }>;
-  className?: string;
+  change: number;
+  icon: any;
+  trendData?: number[]; // ✅ ADICIONADO
 }
 
-export const MetricCard = ({
+export function MetricCard({
   title,
   value,
   change,
   icon: Icon,
-  subtitle,
-  trend,
-  trendData,
-  className,
-}: MetricCardProps) => {
+  trendData = [],
+}: MetricCardProps) {
   return (
-    <GlassCard className={cn('p-6', className)}>
-      <div className="flex items-start justify-between mb-4">
-        <div className="p-3 rounded-lg bg-primary/20 glow-primary">
-          <Icon className="w-6 h-6 text-primary" />
+    <Card className="p-5 bg-white/[0.02] border border-white/10 rounded-2xl shadow-xl backdrop-blur-md">
+      <div className="flex items-start justify-between">
+        {/* ÍCONE */}
+        <div className="p-3 rounded-xl bg-primary/10 text-primary">
+          <Icon size={20} />
         </div>
-        {change !== undefined && (
-          <div
-            className={cn(
-              'text-sm font-medium font-mono-data',
-              change >= 0 ? 'text-green-400' : 'text-red-400'
-            )}
-          >
-            {change >= 0 ? '+' : ''}
-            {change}%
-          </div>
-        )}
+
+        {/* VARIAÇÃO */}
+        <span
+          className={cn(
+            "text-sm font-semibold",
+            change >= 0 ? "text-green-400" : "text-red-400"
+          )}
+        >
+          {change >= 0 ? "+" : ""}
+          {change}%
+        </span>
       </div>
 
-      <div className="space-y-1">
-        <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="text-3xl font-bold font-mono-data">{value}</p>
-        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-      </div>
+      {/* TÍTULO */}
+      <h3 className="text-sm text-muted-foreground mt-4">{title}</h3>
 
-      {(trend || trendData) && (
-        <div className="mt-4">
-          {trendData ? (
-            <div className="h-[60px]">
-              <ResponsiveContainer width="100%" height={60}>
-                <AreaChart data={trendData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id={`gradient-${title.replace(/\s+/g, '-')}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill={`url(#gradient-${title.replace(/\s+/g, '-')})`}
-                    isAnimationActive={true}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : trend}
+      {/* VALOR */}
+      <p className="text-3xl font-bold tracking-tight mt-1">{value}</p>
+
+      {/* 🔥 MINI GRÁFICO REAL */}
+      {trendData.length > 0 && (
+        <div className="h-12 mt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={trendData.map((v) => ({ value: v }))}
+            >
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#8B5CF6"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       )}
-    </GlassCard>
+    </Card>
   );
-};
+}
