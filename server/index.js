@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { google } from "googleapis";
+import fetch from "node-fetch"; // <— adicionada para Hostinger + n8n
 
 dotenv.config();
 
@@ -11,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 // -----------------------------------------------------------
-// GOOGLE AUTH
+// GOOGLE AUTH (Sheets)
 // -----------------------------------------------------------
 const auth = new google.auth.GoogleAuth({
   credentials: {
@@ -22,24 +23,21 @@ const auth = new google.auth.GoogleAuth({
 });
 
 const sheets = google.sheets({ version: "v4", auth });
-
-// -----------------------------------------------------------
-// LEITURA DAS ABAS
-// -----------------------------------------------------------
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 
-
+// -----------------------------------------------------------
+// FUNÇÃO PARA LER ABA
+// -----------------------------------------------------------
 async function lerAba(range) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range,
   });
-
   return res.data.values || [];
 }
 
 // -----------------------------------------------------------
-// NORMALIZAÇÕES (igual Apps Script)
+// NORMALIZAÇÃO (apenas para DASHBOARD)
 // -----------------------------------------------------------
 function normalizarSentimento(s) {
   s = (s || "").toLowerCase();
@@ -54,10 +52,16 @@ function criarEstrutura() {
     sentimentos: { positivo: 0, neutro: 0, negativo: 0 },
     recentes: [],
     tudo: [],
+    trends: {
+      totalTrendData: [],
+      positiveTrendData: [],
+      neutralTrendData: [],
+      negativeTrendData: [],
+      trendChange: { total: 0, positivo: 0, neutro: 0, negativo: 0 },
+    },
   };
 }
 
-// helper para formatar data YYYY-MM-DD
 function formatDateKey(date) {
   const d = new Date(date);
   if (isNaN(d.getTime())) return null;
@@ -66,10 +70,9 @@ function formatDateKey(date) {
 }
 
 // -----------------------------------------------------------
-// FUNÇÃO: GERAR TENDÊNCIA ÚLTIMOS 7 DIAS + VARIAÇÃO HOJE/ONTEM
+// TENDÊNCIA (mini-gráficos)
 // -----------------------------------------------------------
 function calcularTrends(allItems) {
-  // mapa: "YYYY-MM-DD" -> contagens
   const porDia = {};
 
   for (const item of allItems) {
@@ -78,24 +81,16 @@ function calcularTrends(allItems) {
     if (!key) continue;
 
     if (!porDia[key]) {
-      porDia[key] = {
-        total: 0,
-        positivo: 0,
-        neutro: 0,
-        negativo: 0,
-      };
+      porDia[key] = { total: 0, positivo: 0, neutro: 0, negativo: 0 };
     }
 
-    porDia[key].total += 1;
-    if (item.sentimento === "positivo") porDia[key].positivo += 1;
-    else if (item.sentimento === "negativo") porDia[key].negativo += 1;
-    else porDia[key].neutro += 1;
+    porDia[key].total++;
+    porDia[key][item.sentimento]++;
   }
 
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
 
-  // gerar últimos 7 dias (do mais antigo pro mais recente)
   const dias = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(hoje);
@@ -109,20 +104,13 @@ function calcularTrends(allItems) {
   const negativeTrendData = [];
 
   dias.forEach((dia) => {
-    const info = porDia[dia] || {
-      total: 0,
-      positivo: 0,
-      neutro: 0,
-      negativo: 0,
-    };
-
+    const info = porDia[dia] || { total: 0, positivo: 0, neutro: 0, negativo: 0 };
     totalTrendData.push(info.total);
     positiveTrendData.push(info.positivo);
     neutralTrendData.push(info.neutro);
     negativeTrendData.push(info.negativo);
   });
 
-  // variação de hoje vs ontem
   const hojeKey = formatDateKey(hoje);
   const ontem = new Date(hoje);
   ontem.setDate(hoje.getDate() - 1);
@@ -141,55 +129,46 @@ function calcularTrends(allItems) {
     negativo: 0,
   };
 
-  function calcChange(hojeVal, ontemVal) {
-    if (!ontemVal || ontemVal === 0) return 0;
-    return Math.round(((hojeVal - ontemVal) / ontemVal) * 100);
+  function variation(hojeValor, ontemValor) {
+    if (ontemValor === 0) return 0;
+    return Math.round(((hojeValor - ontemValor) / ontemValor) * 100);
   }
-
-  const trendChange = {
-    total: calcChange(hojeInfo.total, ontemInfo.total),
-    positivo: calcChange(hojeInfo.positivo, ontemInfo.positivo),
-    neutro: calcChange(hojeInfo.neutro, ontemInfo.neutro),
-    negativo: calcChange(hojeInfo.negativo, ontemInfo.negativo),
-  };
 
   return {
     totalTrendData,
     positiveTrendData,
     neutralTrendData,
     negativeTrendData,
-    trendChange,
+    trendChange: {
+      total: variation(hojeInfo.total, ontemInfo.total),
+      positivo: variation(hojeInfo.positivo, ontemInfo.positivo),
+      neutro: variation(hojeInfo.neutro, ontemInfo.neutro),
+      negativo: variation(hojeInfo.negativo, ontemInfo.negativo),
+    },
   };
 }
-
 // -----------------------------------------------------------
-// ROTA PRINCIPAL DO DASHBOARD
+// ROTA PRINCIPAL (/api/dashboard)
 // -----------------------------------------------------------
 app.get("/api/dashboard", async (req, res) => {
   try {
-    // Ler abas
     const comentariosSheet = await lerAba("Comentários!A:Z");
     const storiesSheet = await lerAba("Menção Storie!A:Z");
 
-    // ------------------------
-    // Ler Comentários (Feed/Reels)
-    // ------------------------
-    const comentarios = (() => {
-      if (!comentariosSheet.length) {
-        return { feed: criarEstrutura(), reels: criarEstrutura(), tudo: [] };
-      }
+    // FEED & REELS
+    const feed = criarEstrutura();
+    const reels = criarEstrutura();
+    const tudoComentarios = [];
 
+    if (comentariosSheet.length > 1) {
       const headers = comentariosSheet[0].map((h) => h.trim().toLowerCase());
+
       const idxSent = headers.indexOf("sentimento");
       const idxCmt = headers.indexOf("conteudo_do_comentario");
       const idxUser = headers.indexOf("username_do_lead");
       const idxTipo = headers.indexOf("tipo_de_publicacao");
       const idxData = headers.indexOf("data");
       const idxHora = headers.indexOf("hora");
-
-      const feed = criarEstrutura();
-      const reels = criarEstrutura();
-      const tudo = [];
 
       for (let i = 1; i < comentariosSheet.length; i++) {
         const row = comentariosSheet[i];
@@ -206,144 +185,394 @@ app.get("/api/dashboard", async (req, res) => {
           tipo,
         };
 
-        tudo.push(item);
+        tudoComentarios.push(item);
 
         if (tipo === "FEED") {
           feed.sentimentos[sentimento]++;
           feed.recentes.push(item);
+          feed.tudo.push(item);
         }
+
         if (tipo === "REELS") {
           reels.sentimentos[sentimento]++;
           reels.recentes.push(item);
+          reels.tudo.push(item);
         }
       }
 
       feed.recentes.reverse();
-      reels.recentes.reverse();
+reels.recentes.reverse();
 
-      return { feed, reels, tudo };
-    })();
+// 🔥 FEED: Apenas 6 últimas
+const feedSeisUltimas = feed.recentes.slice(0, 6);
+feed.recentes = feedSeisUltimas;
 
-    // ------------------------
-    // Ler Menção Storie
-    // ------------------------
-    const stories = (() => {
-      if (!storiesSheet.length) {
-        const storyEmpty = criarEstrutura();
-        return storyEmpty;
-      }
+// 🔥 REELS: Apenas 6 últimas
+const reelsSeisUltimas = reels.recentes.slice(0, 6);
+reels.recentes = reelsSeisUltimas;
 
-      const headers = storiesSheet[0].map((h) => h.trim().toLowerCase());
+// Não mexer! Trends precisam do histórico completo
+feed.trends = calcularTrends(feed.tudo);
+reels.trends = calcularTrends(reels.tudo);
 
-      const idxSent = headers.indexOf("sentimento");
-      const idxResp = headers.indexOf("resposta_ia");
-      const idxData = headers.indexOf("data");
-      const idxUser = headers.indexOf("username (quando já tivermos salvo)");
+    }
 
-      const story = criarEstrutura();
+    // STORY
+const story = criarEstrutura();
 
-      for (let i = 1; i < storiesSheet.length; i++) {
-        const row = storiesSheet[i];
+if (storiesSheet.length > 1) {
+  const headers = storiesSheet[0].map((h) => h.trim().toLowerCase());
 
-        const sentimento = normalizarSentimento(row[idxSent]);
+  const idxSent = headers.indexOf("sentimento");
+  const idxResp = headers.indexOf("resposta_ia");
+  const idxData = headers.indexOf("data");
+  const idxUser = headers.indexOf("username (quando já tivermos salvo)");
 
-        const item = {
-          username: row[idxUser] || "",
-          comentario: row[idxResp] || "",
-          data: row[idxData] || "",
-          sentimento,
-          tipo: "STORY",
-        };
+  for (let i = 1; i < storiesSheet.length; i++) {
+    const row = storiesSheet[i];
 
-        story.sentimentos[sentimento]++;
-        story.recentes.push(item);
-        story.tudo.push(item);
-      }
+    const sentimento = normalizarSentimento(row[idxSent]);
 
-      story.recentes.reverse();
+    const item = {
+      username: row[idxUser] || "",
+      comentario: row[idxResp] || "",
+      data: row[idxData] || "",
+      sentimento,
+      tipo: "STORY",
+    };
 
-      return story;
-    })();
+    story.sentimentos[sentimento]++;
+    story.recentes.push(item);
+    story.tudo.push(item);
+  }
 
-    // ------------------------
-    // MONTAR DASHBOARD (igual Apps Script)
-    // ------------------------
+  // Ordena do mais recente para o mais antigo
+  story.recentes.reverse();
+
+  // Faz uma cópia com apenas 6 para o dashboard
+  const storySeisUltimas = story.recentes.slice(0, 6);
+
+  // Envia apenas 6 para o front
+  story.recentes = storySeisUltimas;
+
+  // Trends continuam usando TUDO
+  story.trends = calcularTrends(story.tudo);
+}
+
+
+    // VISÃO GERAL
     const totalPos =
-      comentarios.feed.sentimentos.positivo +
-      comentarios.reels.sentimentos.positivo +
-      stories.sentimentos.positivo;
+      feed.sentimentos.positivo +
+      reels.sentimentos.positivo +
+      story.sentimentos.positivo;
 
     const totalNeu =
-      comentarios.feed.sentimentos.neutro +
-      comentarios.reels.sentimentos.neutro +
-      stories.sentimentos.neutro;
+      feed.sentimentos.neutro +
+      reels.sentimentos.neutro +
+      story.sentimentos.neutro;
 
     const totalNeg =
-      comentarios.feed.sentimentos.negativo +
-      comentarios.reels.sentimentos.negativo +
-      stories.sentimentos.negativo;
+      feed.sentimentos.negativo +
+      reels.sentimentos.negativo +
+      story.sentimentos.negativo;
 
-    const totalGeral = totalPos + totalNeu + totalNeg || 0;
+    const totais = {
+      total: totalPos + totalNeu + totalNeg,
+      positivo: totalPos,
+      neutro: totalNeu,
+      negativo: totalNeg,
+    };
 
-    const percentuais = totalGeral
-      ? {
-          positivo: Math.round((totalPos / totalGeral) * 100),
-          neutro: Math.round((totalNeu / totalGeral) * 100),
-          negativo: Math.round((totalNeg / totalGeral) * 100),
-        }
-      : { positivo: 0, neutro: 0, negativo: 0 };
+    const percentuais = {
+      positivo: totais.total ? Math.round((totalPos / totais.total) * 100) : 0,
+      neutro: totais.total ? Math.round((totalNeu / totais.total) * 100) : 0,
+      negativo: totais.total ? Math.round((totalNeg / totais.total) * 100) : 0,
+    };
 
-    const recentComments = [...comentarios.tudo, ...stories.tudo]
-      .sort(
-        (a, b) =>
-          new Date(b.data + " " + (b.hora || "00:00")).getTime() -
-          new Date(a.data + " " + (a.hora || "00:00")).getTime()
-      )
-      .slice(0, 20);
+    const recentComments = [...tudoComentarios, ...story.tudo]
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+      .slice(0, 6);  // somente os 6 mais recentes
 
-    const mapa = {};
-    [...comentarios.tudo, ...stories.tudo].forEach((item) => {
-      const u = item.username || "desconhecido";
-      mapa[u] = (mapa[u] || 0) + 1;
-    });
+    // -----------------------------------------------------------
+// TOP 5 ENGAJADORES — REALISTA E EM TEMPO REAL
+// -----------------------------------------------------------
 
-    const top5Engagers = Object.keys(mapa)
-      .map((u) => ({ username: u, interacoes: mapa[u] }))
-      .sort((a, b) => b.interacoes - a.interacoes)
-      .slice(0, 5);
+// objeto para contagem de interações por usuário
+const contador = {};
 
-    // ------------------------
-    // TENDÊNCIA + VARIAÇÃO HOJE/ONTEM
-    // ------------------------
-    const {
-      totalTrendData,
-      positiveTrendData,
-      neutralTrendData,
-      negativeTrendData,
-      trendChange,
-    } = calcularTrends([...comentarios.tudo, ...stories.tudo]);
+// função para registrar interações
+function registrarInteracao(item) {
+  let user = (item.username || "").trim().toLowerCase();
 
-    return res.json({
+  // ignora vazio
+  if (!user || user === "") return;
+
+  // remover possíveis @ duplicados
+  if (user.startsWith("@")) user = user.substring(1);
+
+  // normalizar espaços indevidos
+  user = user.replace(/\s+/g, "");
+
+  // incrementa
+  contador[user] = (contador[user] || 0) + 1;
+}
+
+// registrar FEED, REELS, STORY
+feed.tudo.forEach(registrarInteracao);
+reels.tudo.forEach(registrarInteracao);
+story.tudo.forEach(registrarInteracao);
+
+// gerar ranking do mais engajador
+const top5Engagers = Object.entries(contador)
+  .map(([username, interacoes]) => ({
+    username: "@" + username, // devolve com @
+    interacoes,
+  }))
+  .sort((a, b) => b.interacoes - a.interacoes)
+  .slice(0, 5);
+
+
+    res.json({
       status: "ok",
-      totais: {
-        total: totalGeral,
-        positivo: totalPos,
-        neutro: totalNeu,
-        negativo: totalNeg,
-      },
+      feed,
+      reels,
+      story,
+      totais,
       percentuais,
-      satisfacao: percentuais.positivo,
       recentComments,
       top5Engagers,
-      totalTrendData,
-      positiveTrendData,
-      neutralTrendData,
-      negativeTrendData,
-      trendChange,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro interno" });
+  }
+});
+// -----------------------------------------------------------
+// ROTA MONITOR (/monitor/user) – busca por ID ou @username
+// -----------------------------------------------------------
+app.get("/monitor/user", async (req, res) => {
+  try {
+    const queryRaw = req.query.q || "";
+    const query = String(queryRaw).toLowerCase().trim();
+
+    if (!query) {
+      return res.status(400).json({ error: "Parâmetro 'q' é obrigatório" });
+    }
+
+    const rows = await lerAba("Comentários!A:Z");
+    if (!rows.length) {
+      return res.json({ found: false });
+    }
+
+    const header = rows[0].map((h) => h.trim().toLowerCase());
+
+    const colId = header.indexOf("id_do_lead");
+    const colUser = header.indexOf("username_do_lead");
+    const colComent = header.indexOf("conteudo_do_comentario");
+    const colDate = header.indexOf("data");
+    const colType = header.indexOf("tipo_de_publicacao");
+    const colSent = header.indexOf("sentimento");
+    const colHora = header.indexOf("hora");
+
+    const results = rows.slice(1).filter((r) => {
+      const id = (r[colId] || "").toLowerCase();
+      const user = (r[colUser] || "").toLowerCase();
+
+      if (query.startsWith("@")) {
+        return user === query.replace("@", "");
+      }
+
+      if (query.includes(".")) {
+        return user === query;
+      }
+
+      return id === query;
+    });
+
+    if (results.length === 0) {
+      return res.json({ found: false });
+    }
+
+    // Contagem EXATA conforme planilha (sem normalizar)
+    const sentiments = { positive: 0, neutral: 0, negative: 0 };
+    const interactions = [];
+
+    results.forEach((r, index) => {
+      const sentimentCell = (r[colSent] || "").toLowerCase();
+
+      let sentimentKey = "neutral";
+      if (sentimentCell.includes("positivo")) sentimentKey = "positive";
+      else if (sentimentCell.includes("negativo")) sentimentKey = "negative";
+      else if (sentimentCell.includes("neutro")) sentimentKey = "neutral";
+
+      sentiments[sentimentKey]++;
+
+      interactions.push({
+        id: index + 1,
+        type: r[colType] || "",
+        sentiment: sentimentKey,
+        text: r[colComent] || "",
+        date: r[colDate] || "",
+        time: r[colHora] || "",
+      });
+    });
+
+    const total =
+      sentiments.positive + sentiments.neutral + sentiments.negative || 1;
+
+    const percent = {
+      positive: Math.round((sentiments.positive / total) * 100) || 0,
+      neutral: Math.round((sentiments.neutral / total) * 100) || 0,
+      negative: Math.round((sentiments.negative / total) * 100) || 0,
+    };
+
+    // Último engajamento = data da interação mais recente
+    const latestDate = results
+      .map((r) => r[colDate])
+      .filter(Boolean)
+      .sort((a, b) => new Date(b) - new Date(a))[0];
+
+    res.json({
+      found: true,
+      instagram_handle: "@" + (results[0][colUser] || ""),
+      name: results[0][colUser] || "",
+      totalInteractions: total === 1 ? 0 : total, // se só 1 e veio do divisor de segurança, ajusta
+      lastEngagement: latestDate || "",
+      sentiment: percent,
+      interactions,
+    });
+  } catch (err) {
+    console.error("Erro /monitor/user:", err);
+    res.status(500).json({ error: "Erro interno no servidor" });
+  }
+});
+// -----------------------------------------------------------
+// FUNÇÕES AUXILIARES – Hostinger & n8n
+// -----------------------------------------------------------
+async function getHostingerMetrics() {
+  try {
+    // Função auxiliar para gerar histórico suave
+    const smoothHistory = (base, variance = 0.15, points = 20) => {
+      return Array.from({ length: points }).map(() => {
+        const variation = base * variance * (Math.random() - 0.5);
+        return { value: Number((base + variation).toFixed(2)) };
+      });
+    };
+
+    return {
+      ok: true,
+      source: "mock",
+
+      cpu: {
+        value: 2.0,
+        history: smoothHistory(2.0, 0.3),
+      },
+
+      memory: {
+        value: 19.0,
+        history: smoothHistory(19.0, 0.1),
+      },
+
+      disk: {
+        usedGB: 13,
+        totalGB: 100,
+      },
+
+      trafficIn: {
+        value: 73.4,
+        history: smoothHistory(73.4, 0.25),
+      },
+
+      trafficOut: {
+        value: 40.1,
+        history: smoothHistory(40.1, 0.25),
+      },
+
+      bandwidth: {
+        usedTB: 0.054,
+        totalTB: 8,
+      }
+    };
+  } catch (err) {
+    console.error("Erro no mock Hostinger:", err);
+    return { ok: false };
+  }
+}
+
+async function getN8nMetrics() {
+  // MOCK REALISTA — baseado no seu painel
+
+  // Dados reais da sua tela
+  const prodExecutionsValue = 26565;
+  const failedExecutionsValue = 723;
+  const failureRateValue = 2.7;
+  const avgRuntimeValue = 6.97;
+
+  // Trend suave (10 pontos)
+  function smoothHistory(base, variation = 0.1) {
+    return Array.from({ length: 10 }).map(() => ({
+      value: Number(
+        (base + (Math.random() - 0.5) * base * variation).toFixed(2)
+      ),
+    }));
+  }
+
+  // Estimativa simples de tempo salvo
+  const timeSavedHours =
+    Number(((prodExecutionsValue * 60 - prodExecutionsValue * avgRuntimeValue) / 3600).toFixed(1)) || 0;
+
+  return {
+    ok: true,
+    source: "mock-n8n",
+
+    prodExecutions: {
+      value: prodExecutionsValue,
+      changePct: -51.97,
+      history: smoothHistory(prodExecutionsValue, 0.15),
+    },
+
+    failedExecutions: {
+      value: failedExecutionsValue,
+      changePct: 96.1,
+      history: smoothHistory(failedExecutionsValue, 0.25),
+    },
+
+    failureRate: {
+      value: failureRateValue,
+      changePct: -30.8,
+      history: smoothHistory(failureRateValue, 0.15),
+    },
+
+    avgRuntimeSeconds: {
+      value: avgRuntimeValue,
+      changePct: -9.33,
+      history: smoothHistory(avgRuntimeValue, 0.1),
+    },
+
+    timeSavedHours: {
+      value: timeSavedHours,
+      changePct: 0,
+    },
+  };
+}
+// -----------------------------------------------------------
+// ROTA CONSOLE (/api/console) – Hostinger + n8n
+// -----------------------------------------------------------
+app.get("/api/console", async (req, res) => {
+  try {
+    const [hostinger, n8n] = await Promise.all([
+      getHostingerMetrics(),
+      getN8nMetrics(),
+    ]);
+
+    res.json({
+      status: "ok",
+      hostinger,
+      n8n,
+    });
+  } catch (err) {
+    console.error("Erro /api/console:", err);
+    res.status(500).json({ error: "Erro interno no console" });
   }
 });
 
@@ -351,6 +580,7 @@ app.get("/api/dashboard", async (req, res) => {
 // INICIAR SERVIDOR
 // -----------------------------------------------------------
 const PORT = process.env.PORT || 3001;
+
 app.listen(PORT, () => {
   console.log(`🚀 Backend rodando em http://localhost:${PORT}`);
 });

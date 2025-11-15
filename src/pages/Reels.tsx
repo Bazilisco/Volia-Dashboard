@@ -1,145 +1,167 @@
-import { DashboardLayout } from '@/components/DashboardLayout';
-import { MetricCard } from '@/components/MetricCard';
-import { GlassCard } from '@/components/GlassCard';
-import { TrendingUp, Smile, Minus, Frown, MessageCircle } from 'lucide-react';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { useState, useEffect } from 'react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+// src/pages/Reels.tsx
+import { DashboardLayout } from "@/components/DashboardLayout";
+import { MetricCard } from "@/components/MetricCard";
+import { GlassCard } from "@/components/GlassCard";
+import { useDashboardEngagement } from "@/services/dashboard";
 
-const mockData = [
-  { value: 350 },
-  { value: 480 },
-  { value: 620 },
-  { value: 580 },
-  { value: 720 },
-  { value: 680 },
-  { value: 850 },
-];
+import {
+  TrendingUp,
+  Smile,
+  Minus,
+  Frown,
+  MessageCircle,
+  Film,
+} from "lucide-react";
 
-const initialComments = [
-  { id: 1, user: 'Ana Silva', avatar: 'AS', comment: 'Esse reel está viral! Muito bom 🔥', time: '1 min', sentiment: 'positive' },
-  { id: 2, user: 'Carlos Mendes', avatar: 'CM', comment: 'Melhor reel do mês disparado!', time: '4 min', sentiment: 'positive' },
-  { id: 3, user: 'Maria Santos', avatar: 'MS', comment: 'Legal, mas o áudio poderia ser melhor', time: '6 min', sentiment: 'neutral' },
-  { id: 4, user: 'João Pedro', avatar: 'JP', comment: 'Compartilhei em todos os lugares! 🚀', time: '9 min', sentiment: 'positive' },
-  { id: 5, user: 'Beatriz Costa', avatar: 'BC', comment: 'Conteúdo top demais!', time: '11 min', sentiment: 'positive' },
-];
-
-const allComments = [
-  ...initialComments,
-  { id: 6, user: 'Rafael Lima', avatar: 'RL', comment: 'Esse reel merece milhões de views!', time: 'agora', sentiment: 'positive' },
-  { id: 7, user: 'Juliana Rocha', avatar: 'JR', comment: 'Bom, mas já vi parecido', time: 'agora', sentiment: 'neutral' },
-  { id: 8, user: 'Pedro Alves', avatar: 'PA', comment: 'Incrível! Salvei para rever várias vezes', time: 'agora', sentiment: 'positive' },
-];
-
-const MiniTrendChart = ({ data }: { data: typeof mockData }) => (
-  <ResponsiveContainer width="100%" height={60}>
-    <AreaChart data={data}>
-      <defs>
-        <linearGradient id="colorValueReels" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%" stopColor="#8c4bff" stopOpacity={0.3} />
-          <stop offset="95%" stopColor="#8c4bff" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <Area
-        type="monotone"
-        dataKey="value"
-        stroke="#8c4bff"
-        strokeWidth={2}
-        fillOpacity={1}
-        fill="url(#colorValueReels)"
-        animationDuration={1000}
-      />
-    </AreaChart>
-  </ResponsiveContainer>
-);
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function Reels() {
-  const [recentComments, setRecentComments] = useState(initialComments);
-  const [commentIndex, setCommentIndex] = useState(5);
+  const { data, isLoading } = useDashboardEngagement();
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (commentIndex < allComments.length) {
-        setRecentComments(prev => {
-          const newComments = [allComments[commentIndex], ...prev.slice(0, 4)];
-          return newComments;
-        });
-        setCommentIndex(prev => prev + 1);
-      } else {
-        setCommentIndex(5);
-      }
-    }, 5000);
+  if (isLoading || !data) {
+    return (
+      <DashboardLayout>
+        <p className="text-muted-foreground">Carregando dados de Reels...</p>
+      </DashboardLayout>
+    );
+  }
 
-    return () => clearInterval(interval);
-  }, [commentIndex]);
+  // 🔹 Pega o bloco de REELS vindo da API
+  const reels = data.reels;
 
-  const getSentimentColor = (sentiment: string) => {
-    switch(sentiment) {
-      case 'positive': return 'text-green-400';
-      case 'negative': return 'text-red-400';
-      default: return 'text-yellow-400';
+  // ================================
+  // FUNÇÃO SEGURA PARA GERAR INICIAIS
+  // ================================
+  const getInitials = (username: string | undefined | null) => {
+    if (!username || typeof username !== "string") return "??";
+
+    const clean = username.replace("@", "").trim();
+    if (!clean) return "??";
+
+    const parts = clean.split(/[._]/).filter(Boolean);
+
+    if (parts.length >= 2) {
+      const a = parts[0][0]?.toUpperCase() || "?";
+      const b = parts[1][0]?.toUpperCase() || "?";
+      return `${a}${b}`;
     }
+
+    const first = clean[0]?.toUpperCase() || "?";
+    const second = clean[1]?.toUpperCase() || "?";
+    return `${first}${second}`;
+  };
+
+  // ================================
+  // CÁLCULO DO TERMÔMETRO
+  // ================================
+  const totalInteracoes =
+    reels.sentimentos.positivo +
+    reels.sentimentos.neutro +
+    reels.sentimentos.negativo;
+
+  const totalSeguro = totalInteracoes || 1;
+
+  const sentimentoPct = {
+    positivo: (reels.sentimentos.positivo / totalSeguro) * 100,
+    neutro: (reels.sentimentos.neutro / totalSeguro) * 100,
+    negativo: (reels.sentimentos.negativo / totalSeguro) * 100,
+  };
+
+  // 🔹 Garantir arrays mesmo se trends vier undefined
+  const trends = reels.trends || {
+    totalTrendData: [] as number[],
+    positiveTrendData: [] as number[],
+    neutralTrendData: [] as number[],
+    negativeTrendData: [] as number[],
   };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* --------------------- */}
+        {/* TÍTULO */}
+        {/* --------------------- */}
         <div>
           <h1 className="text-4xl font-bold mb-2">Reels Analytics</h1>
-          <p className="text-muted-foreground">Desempenho dos seus reels</p>
+          <p className="text-muted-foreground">
+            Desempenho e sentimento dos comentários em Reels
+          </p>
         </div>
 
+        {/* --------------------- */}
+        {/* MÉTRICAS + MINI GRÁFICOS */}
+        {/* --------------------- */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <MetricCard 
-            title="Total de Interações" 
-            value="128.000" 
-            change={45.2} 
+          <MetricCard
+            title="Total de Interações"
+            value={totalInteracoes}
             icon={TrendingUp}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.totalTrendData}
           />
-          <MetricCard 
-            title="Positivo" 
-            value="98.500" 
-            change={48.1} 
+
+          <MetricCard
+            title="Positivo"
+            value={reels.sentimentos.positivo}
             icon={Smile}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.positiveTrendData}
           />
-          <MetricCard 
-            title="Neutro" 
-            value="22.800" 
-            change={15.3} 
+
+          <MetricCard
+            title="Neutro"
+            value={reels.sentimentos.neutro}
             icon={Minus}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.neutralTrendData}
           />
-          <MetricCard 
-            title="Negativo" 
-            value="6.700" 
-            change={-8.7} 
+
+          <MetricCard
+            title="Negativo"
+            value={reels.sentimentos.negativo}
             icon={Frown}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.negativeTrendData}
           />
         </div>
 
+        {/* --------------------- */}
+        {/* TERMÔMETRO DE SENTIMENTO */}
+        {/* --------------------- */}
         <div className="p-6 rounded-lg glass">
           <h3 className="text-lg font-semibold mb-6">Termômetro de Sentimento</h3>
+
           <div className="space-y-6 max-w-3xl mx-auto">
             {[
-              { label: 'Positivo', value: 76.9, color: 'rgba(34, 197, 94, 0.3)' },
-              { label: 'Neutro', value: 17.8, color: 'rgba(234, 179, 8, 0.3)' },
-              { label: 'Negativo', value: 5.3, color: 'rgba(239, 68, 68, 0.3)' },
-            ].map((sentiment) => (
-              <div key={sentiment.label} className="space-y-3">
+              {
+                label: "Positivo",
+                value: sentimentoPct.positivo,
+                color: "rgba(34, 197, 94, 0.3)",
+              },
+              {
+                label: "Neutro",
+                value: sentimentoPct.neutro,
+                color: "rgba(234, 179, 8, 0.3)",
+              },
+              {
+                label: "Negativo",
+                value: sentimentoPct.negativo,
+                color: "rgba(239, 68, 68, 0.3)",
+              },
+            ].map((s) => (
+              <div key={s.label} className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-muted-foreground tracking-wide">{sentiment.label}</span>
-                  <span className="text-2xl font-bold font-mono-data">{sentiment.value}%</span>
+                  <span className="text-sm font-medium text-muted-foreground tracking-wide">
+                    {s.label}
+                  </span>
+                  <span className="text-2xl font-bold font-mono-data">
+                    {s.value.toFixed(1)}%
+                  </span>
                 </div>
-                <div className="h-4 rounded-full overflow-hidden backdrop-blur-xl bg-white/5 border border-white/10 shadow-lg">
+
+                <div className="h-4 rounded-full overflow-hidden bg-white/5 border border-white/10">
                   <div
-                    className="h-full rounded-full transition-all duration-700 ease-out backdrop-blur-sm"
+                    className="h-full rounded-full transition-all duration-700 ease-out"
                     style={{
-                      width: `${sentiment.value}%`,
-                      backgroundColor: sentiment.color,
-                      boxShadow: `0 0 20px ${sentiment.color}`,
+                      width: `${s.value}%`,
+                      backgroundColor: s.color,
+                      boxShadow: `0 0 20px ${s.color}`,
                     }}
                   />
                 </div>
@@ -148,34 +170,44 @@ export default function Reels() {
           </div>
         </div>
 
+        {/* --------------------- */}
+        {/* ÚLTIMOS COMENTÁRIOS */}
+        {/* --------------------- */}
         <GlassCard className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <MessageCircle className="w-5 h-5 text-primary" />
-            <h3 className="text-lg font-semibold">Últimos comentários</h3>
-            <span className="ml-auto text-xs text-muted-foreground">Tempo real</span>
+            <h3 className="text-lg font-semibold">Últimos comentários em Reels</h3>
+            <span className="ml-auto text-xs text-muted-foreground">
+              Atualizado a partir da planilha
+            </span>
           </div>
+
           <div className="space-y-4">
-            {recentComments.map((comment, index) => (
-              <div 
-                key={`${comment.id}-${index}`}
+            {reels.recentes.map((c: any, i: number) => (
+              <div
+                key={i}
                 className="p-3 rounded-lg bg-white/[0.02] border border-white/10 hover:border-primary/30 hover:bg-white/[0.05] transition-all"
-                style={{
-                  animation: index === 0 ? 'slideIn 0.5s ease-out' : 'none'
-                }}
               >
                 <div className="flex items-start gap-3">
                   <Avatar className="w-12 h-12 border-2 border-primary/20">
                     <AvatarFallback className="text-sm bg-primary/20 text-white font-semibold">
-                      {comment.avatar}
+                      {getInitials(c.username)}
                     </AvatarFallback>
                   </Avatar>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm">{comment.user}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">{comment.time}</span>
+                      <span className="font-semibold text-sm text-primary">
+                        @{c.username || "desconhecido"}
+                      </span>
+
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {c.data}
+                      </span>
                     </div>
-                    <p className={`text-sm ${getSentimentColor(comment.sentiment)}`}>
-                      {comment.comment}
+
+                    <p className="text-sm text-muted-foreground">
+                      {c.comentario}
                     </p>
                   </div>
                 </div>

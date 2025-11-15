@@ -1,9 +1,9 @@
 // src/services/dashboard.ts
 import { useQuery } from "@tanstack/react-query";
 
-// =======================================
-// 🔹 TIPAGENS
-// =======================================
+/* =======================================================
+   🔹 TIPAGENS BASE
+   ======================================================= */
 
 export type Sentiment = "positivo" | "neutro" | "negativo";
 
@@ -21,12 +21,34 @@ export interface TopEngager {
   interacoes: number;
 }
 
-export interface TrendChange {
-  total: number;
+export interface SentimentosCount {
   positivo: number;
   neutro: number;
   negativo: number;
 }
+
+export interface TrendBlock {
+  trendChange: number; // variação em %
+  totalTrendData: number[];
+  positiveTrendData: number[];
+  neutralTrendData: number[];
+  negativeTrendData: number[];
+}
+
+/* =======================================================
+   🔹 BLOCO POR TIPO (story, feed, reels)
+   ======================================================= */
+
+export interface AnalyticsBlock {
+  sentimentos: SentimentosCount;
+  recentes: DashboardComment[];
+  tudo: DashboardComment[];
+  trends: TrendBlock;
+}
+
+/* =======================================================
+   🔹 RESPOSTA COMPLETA DA API
+   ======================================================= */
 
 export interface DashboardApiResponse {
   status: string;
@@ -47,28 +69,32 @@ export interface DashboardApiResponse {
   satisfacao: number;
 
   recentComments: DashboardComment[];
-
   top5Engagers: TopEngager[];
 
-  // 🔹 Séries para os mini-gráficos
-  totalTrendData: number[];
-  positiveTrendData: number[];
-  neutralTrendData: number[];
-  negativeTrendData: number[];
+  // 🔹 blocos individuais
+  story: AnalyticsBlock;
+  feed: AnalyticsBlock;
+  reels: AnalyticsBlock;
 
-  // 🔹 Variação de hoje vs ontem (para o verdinho do canto)
-  trendChange: TrendChange;
+  // 🔹 campos antigos de tendência geral (mantidos por compatibilidade)
+  totalTrendData?: number[];
+  positiveTrendData?: number[];
+  neutralTrendData?: number[];
+  negativeTrendData?: number[];
+  trendChange?: number;
 }
 
-// =======================================
-// 🔹 URL DA API (backend Node)
-// =======================================
+/* =======================================================
+   🔹 URL DA API BACKEND
+   ======================================================= */
+
 const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 const DASHBOARD_API_URL = `${BASE_URL}/api/dashboard`;
 
-// =======================================
-// 🔹 FUNÇÃO DE FETCH
-// =======================================
+/* =======================================================
+   🔹 FUNÇÃO DE FETCH
+   ======================================================= */
+
 async function fetchDashboardData(): Promise<DashboardApiResponse> {
   const res = await fetch(DASHBOARD_API_URL, {
     method: "GET",
@@ -82,14 +108,14 @@ async function fetchDashboardData(): Promise<DashboardApiResponse> {
   return res.json();
 }
 
-// =======================================
-// 🔹 HOOK PRINCIPAL USADO NO DASHBOARD
-// =======================================
+/* =======================================================
+   🔹 HOOK PRINCIPAL
+   ======================================================= */
+
 export function useDashboardEngagement() {
   return useQuery<DashboardApiResponse>({
     queryKey: ["dashboard-engagement"],
     queryFn: fetchDashboardData,
-    // você pode ajustar esse intervalo depois se quiser
-    refetchInterval: 5000, // 5 segundos
+    refetchInterval: 8000, // ajuste se quiser
   });
 }

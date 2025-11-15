@@ -1,3 +1,5 @@
+// src/pages/Dashboard.tsx
+
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { MetricCard } from '@/components/MetricCard';
 import { GlassCard } from '@/components/GlassCard';
@@ -81,14 +83,12 @@ export default function Dashboard() {
   const {
     totais,
     percentuais,
-    satisfacao,
     recentComments,
     top5Engagers,
     totalTrendData,
     positiveTrendData,
     neutralTrendData,
     negativeTrendData,
-    trendChange,
   } = data;
 
   // ===============================
@@ -100,6 +100,9 @@ export default function Dashboard() {
     { label: 'Negativo', value: percentuais.negativo, color: 'rgba(239, 68, 68, 0.6)' },
   ];
 
+  // ===============================
+  // ÍCONES DOS TIPOS DE INTERAÇÃO
+  // ===============================
   const getTypeIcon = (type: string) => {
     switch (type.toLowerCase()) {
       case 'story': return <ImageIcon className="w-4 h-4" />;
@@ -117,6 +120,11 @@ export default function Dashboard() {
     }
   };
 
+  // ===============================
+  // VALOR MÁXIMO DO TOP 5 PARA A BARRA
+  // ===============================
+  const maxEngajamento = top5Engagers[0]?.interacoes || 1;
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -129,10 +137,10 @@ export default function Dashboard() {
 
         {/* KPI CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          
           <MetricCard
             title="Total de Interações"
             value={totais.total.toLocaleString('pt-BR')}
-            change={trendChange.total}
             icon={TrendingUp}
             trendData={totalTrendData}
           />
@@ -140,7 +148,6 @@ export default function Dashboard() {
           <MetricCard
             title="Positivo"
             value={totais.positivo.toLocaleString('pt-BR')}
-            change={trendChange.positivo}
             icon={Smile}
             trendData={positiveTrendData}
           />
@@ -148,7 +155,6 @@ export default function Dashboard() {
           <MetricCard
             title="Neutro"
             value={totais.neutro.toLocaleString('pt-BR')}
-            change={trendChange.neutro}
             icon={Minus}
             trendData={neutralTrendData}
           />
@@ -156,7 +162,6 @@ export default function Dashboard() {
           <MetricCard
             title="Negativo"
             value={totais.negativo.toLocaleString('pt-BR')}
-            change={trendChange.negativo}
             icon={Frown}
             trendData={negativeTrendData}
           />
@@ -198,30 +203,30 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-4">
-              {recentComments.map((c, i) => (
+              {recentComments.slice(0, 6).map((c, i) => (
                 <div
                   key={i}
                   className="p-3 rounded-lg bg-white/[0.02] border border-white/10 hover:border-primary/30 hover:bg-white/[0.05] transition-all"
                 >
                   <div className="flex items-start gap-3">
 
-                    {/* Avatar */}
                     <Avatar className="w-12 h-12 border-2 border-primary/20">
                       <AvatarFallback className="text-sm bg-primary/20 text-white font-semibold">
                         {getInitials(c.username)}
                       </AvatarFallback>
                     </Avatar>
 
-                    {/* Corpo */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold text-sm text-primary">@{c.username}</span>
+
                         <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 text-xs">
                           {getTypeIcon(c.tipo)}
                           <span className="capitalize">
                             {c.tipo.toLowerCase()}
                           </span>
                         </div>
+
                         <span className="text-xs text-muted-foreground ml-auto">
                           {c.data}
                         </span>
@@ -247,36 +252,49 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-3">
-              {top5Engagers.map((e, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 rounded-lg bg-white/[0.02] border border-white/10 hover:border-accent/30 hover:bg-white/[0.05] transition-all"
-                >
-                  <div className="flex items-center gap-4">
+              {top5Engagers.map((e, idx) => {
+                const percent = (e.interacoes / maxEngajamento) * 100;
 
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent text-sm font-bold">
-                      #{idx + 1}
+                return (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-lg bg-white/[0.02] border border-white/10 hover:border-accent/30 hover:bg-white/[0.05] transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent text-sm font-bold">
+                        #{idx + 1}
+                      </div>
+
+                      <Avatar className="w-14 h-14 border-2 border-accent/20">
+                        <AvatarFallback className="text-base bg-accent/20 text-white font-semibold">
+                          {getInitials(e.username)}
+                        </AvatarFallback>
+                      </Avatar>
+
+                      <div className="flex-1">
+                        <p className="font-semibold text-primary">@{e.username}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {e.interacoes} interações
+                        </p>
+                      </div>
+
+                      <div className="text-green-400 text-sm font-mono-data">
+                        +{e.interacoes}
+                      </div>
                     </div>
 
-                    <Avatar className="w-14 h-14 border-2 border-accent/20">
-                      <AvatarFallback className="text-base bg-accent/20 text-white font-semibold">
-                        {getInitials(e.username)}
-                      </AvatarFallback>
-                    </Avatar>
-
-                    <div className="flex-1">
-                      <p className="font-semibold text-primary">@{e.username}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {e.interacoes} interações
-                      </p>
+                    {/* MINI GRÁFICO DE BARRA */}
+                    <div className="mt-3 h-2 w-full rounded-full bg-primary/10 overflow-hidden">
+                      <div
+                        className="h-full bg-primary/60 transition-all duration-700"
+                        style={{ width: `${percent}%` }}
+                      />
                     </div>
 
-                    <div className="text-green-400 text-sm font-mono-data">
-                      +{e.interacoes}
-                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
           </GlassCard>

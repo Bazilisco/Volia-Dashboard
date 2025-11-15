@@ -1,181 +1,240 @@
-import { DashboardLayout } from '@/components/DashboardLayout';
-import { MetricCard } from '@/components/MetricCard';
-import { GlassCard } from '@/components/GlassCard';
-import { TrendingUp, Smile, Minus, Frown, MessageCircle } from 'lucide-react';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { useState, useEffect } from 'react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { DashboardLayout } from "@/components/DashboardLayout";
+import { MetricCard } from "@/components/MetricCard";
+import { GlassCard } from "@/components/GlassCard";
+import { Smile, Minus, Frown, TrendingUp, MessageCircle } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useDashboardEngagement } from "@/services/dashboard";
 
-const mockData = [
-  { value: 220 },
-  { value: 350 },
-  { value: 280 },
-  { value: 420 },
-  { value: 380 },
-  { value: 450 },
-  { value: 520 },
-];
+// ---------------------------------------------
+// Função para gerar iniciais do username
+// ---------------------------------------------
+function getInitials(username: string) {
+  if (!username) return "?";
+  const clean = username.replace("@", "");
+  const parts = clean.split(/[\._]/);
 
-const initialComments = [
-  { id: 1, user: 'Ana Silva', avatar: 'AS', comment: 'Adorei esse post! Super informativo 👏', time: '3 min', sentiment: 'positive' },
-  { id: 2, user: 'Carlos Mendes', avatar: 'CM', comment: 'Conteúdo excelente, obrigado!', time: '7 min', sentiment: 'positive' },
-  { id: 3, user: 'Maria Santos', avatar: 'MS', comment: 'Poderia adicionar mais exemplos', time: '10 min', sentiment: 'neutral' },
-  { id: 4, user: 'João Pedro', avatar: 'JP', comment: 'Perfeito! Era isso que eu procurava', time: '15 min', sentiment: 'positive' },
-  { id: 5, user: 'Beatriz Costa', avatar: 'BC', comment: 'Continue com esse tipo de conteúdo!', time: '18 min', sentiment: 'positive' },
-];
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
 
-const allComments = [
-  ...initialComments,
-  { id: 6, user: 'Rafael Lima', avatar: 'RL', comment: 'Post incrível! Compartilhando', time: 'agora', sentiment: 'positive' },
-  { id: 7, user: 'Juliana Rocha', avatar: 'JR', comment: 'Bom, mas esperava mais profundidade', time: 'agora', sentiment: 'neutral' },
-  { id: 8, user: 'Pedro Alves', avatar: 'PA', comment: 'Muito útil! Salvei para depois 📌', time: 'agora', sentiment: 'positive' },
-];
+  return clean.substring(0, 2).toUpperCase();
+}
 
-const MiniTrendChart = ({ data }: { data: typeof mockData }) => (
-  <ResponsiveContainer width="100%" height={60}>
-    <AreaChart data={data}>
-      <defs>
-        <linearGradient id="colorValueFeed" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%" stopColor="#8c4bff" stopOpacity={0.3} />
-          <stop offset="95%" stopColor="#8c4bff" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <Area
-        type="monotone"
-        dataKey="value"
-        stroke="#8c4bff"
-        strokeWidth={2}
-        fillOpacity={1}
-        fill="url(#colorValueFeed)"
-        animationDuration={1000}
-      />
-    </AreaChart>
-  </ResponsiveContainer>
-);
+// ---------------------------------------------
+// Mini Trend Chart (SVG simples)
+// ---------------------------------------------
+function MiniTrendChart({ data }: { data: number[] }) {
+  if (!data || data.length === 0) {
+    return <div className="h-12 w-full" />;
+  }
 
+  const max = Math.max(...data);
+
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1 || 1)) * 100;
+      const y = 30 - (v / (max || 1)) * 25;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <div className="h-12 w-full overflow-hidden">
+      <svg viewBox="0 0 100 30" className="w-full h-full">
+        <defs>
+          <linearGradient id="feedGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8B5CF6" stopOpacity="1" />
+            <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        <polyline
+          fill="url(#feedGradient)"
+          stroke="#8B5CF6"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          points={points}
+        />
+      </svg>
+    </div>
+  );
+}
+
+// ---------------------------------------------
+// FEED PAGE
+// ---------------------------------------------
 export default function Feed() {
-  const [recentComments, setRecentComments] = useState(initialComments);
-  const [commentIndex, setCommentIndex] = useState(5);
+  const { data, isLoading } = useDashboardEngagement();
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (commentIndex < allComments.length) {
-        setRecentComments(prev => {
-          const newComments = [allComments[commentIndex], ...prev.slice(0, 4)];
-          return newComments;
-        });
-        setCommentIndex(prev => prev + 1);
-      } else {
-        setCommentIndex(5);
-      }
-    }, 5000);
+  if (!data || isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-10 text-center text-muted-foreground text-lg">
+          Carregando métricas do Feed...
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-    return () => clearInterval(interval);
-  }, [commentIndex]);
+  const feed = data.feed;
 
-  const getSentimentColor = (sentiment: string) => {
-    switch(sentiment) {
-      case 'positive': return 'text-green-400';
-      case 'negative': return 'text-red-400';
-      default: return 'text-yellow-400';
+  // fallback se o backend ainda não estiver mandando trends
+  const emptyTrends = {
+    totalTrendData: [] as number[],
+    positiveTrendData: [] as number[],
+    neutralTrendData: [] as number[],
+    negativeTrendData: [] as number[],
+  };
+
+  const sentimentos = feed.sentimentos;
+  const recentes = feed.recentes || [];
+  const trends = feed.trends ?? emptyTrends;
+
+  const total =
+    sentimentos.positivo + sentimentos.neutro + sentimentos.negativo;
+
+  const percentuais = {
+    positivo: total ? Math.round((sentimentos.positivo / total) * 100) : 0,
+    neutro: total ? Math.round((sentimentos.neutro / total) * 100) : 0,
+    negativo: total ? Math.round((sentimentos.negativo / total) * 100) : 0,
+  };
+
+  const getSentimentColor = (s: string) => {
+    switch (s) {
+      case "positivo":
+        return "text-green-400";
+      case "negativo":
+        return "text-red-400";
+      default:
+        return "text-yellow-400";
     }
   };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* HEADER */}
         <div>
           <h1 className="text-4xl font-bold mb-2">Feed Analytics</h1>
-          <p className="text-muted-foreground">Métricas de engajamento do feed</p>
+          <p className="text-muted-foreground">
+            Métricas de engajamento do Feed
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <MetricCard 
-            title="Total de Interações" 
-            value="25.300" 
-            change={22.5} 
+        {/* KPI CARDS (sem change, só minigráfico) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricCard
+            title="Total de Interações"
+            value={total}
             icon={TrendingUp}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.totalTrendData}
           />
-          <MetricCard 
-            title="Positivo" 
-            value="18.800" 
-            change={25.2} 
+
+          <MetricCard
+            title="Positivo"
+            value={sentimentos.positivo}
             icon={Smile}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.positiveTrendData}
           />
-          <MetricCard 
-            title="Neutro" 
-            value="4.200" 
-            change={-5.1} 
+
+          <MetricCard
+            title="Neutro"
+            value={sentimentos.neutro}
             icon={Minus}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.neutralTrendData}
           />
-          <MetricCard 
-            title="Negativo" 
-            value="2.300" 
-            change={-10.9} 
+
+          <MetricCard
+            title="Negativo"
+            value={sentimentos.negativo}
             icon={Frown}
-            trend={<MiniTrendChart data={mockData} />}
+            trendData={trends.negativeTrendData}
           />
         </div>
 
-        <div className="p-6 rounded-lg glass">
-          <h3 className="text-lg font-semibold mb-6">Termômetro de Sentimento</h3>
-          <div className="space-y-6 max-w-3xl mx-auto">
+        {/* TERMÔMETRO */}
+        <GlassCard className="p-6">
+          <h3 className="text-lg font-semibold mb-6">Análise de Sentimento</h3>
+
+          <div className="space-y-6">
             {[
-              { label: 'Positivo', value: 74.3, color: 'rgba(34, 197, 94, 0.3)' },
-              { label: 'Neutro', value: 16.6, color: 'rgba(234, 179, 8, 0.3)' },
-              { label: 'Negativo', value: 9.1, color: 'rgba(239, 68, 68, 0.3)' },
-            ].map((sentiment) => (
-              <div key={sentiment.label} className="space-y-3">
+              {
+                label: "Positivo",
+                value: percentuais.positivo,
+                color: "rgba(34,197,94,0.4)",
+              },
+              {
+                label: "Neutro",
+                value: percentuais.neutro,
+                color: "rgba(234,179,8,0.4)",
+              },
+              {
+                label: "Negativo",
+                value: percentuais.negativo,
+                color: "rgba(239,68,68,0.4)",
+              },
+            ].map((item) => (
+              <div key={item.label} className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-muted-foreground tracking-wide">{sentiment.label}</span>
-                  <span className="text-2xl font-bold font-mono-data">{sentiment.value}%</span>
+                  <span className="text-sm text-muted-foreground">
+                    {item.label}
+                  </span>
+                  <span className="text-xl font-bold font-mono-data">
+                    {item.value}%
+                  </span>
                 </div>
-                <div className="h-4 rounded-full overflow-hidden backdrop-blur-xl bg-white/5 border border-white/10 shadow-lg">
+
+                <div className="h-3 bg-white/5 border border-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-all duration-700 ease-out backdrop-blur-sm"
+                    className="h-full rounded-full transition-all duration-500"
                     style={{
-                      width: `${sentiment.value}%`,
-                      backgroundColor: sentiment.color,
-                      boxShadow: `0 0 20px ${sentiment.color}`,
+                      width: `${item.value}%`,
+                      backgroundColor: item.color,
                     }}
                   />
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </GlassCard>
 
+        {/* ÚLTIMOS COMENTÁRIOS */}
         <GlassCard className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <MessageCircle className="w-5 h-5 text-primary" />
-            <h3 className="text-lg font-semibold">Últimos comentários</h3>
-            <span className="ml-auto text-xs text-muted-foreground">Tempo real</span>
+            <h3 className="text-lg font-semibold">
+              Últimos comentários no Feed
+            </h3>
           </div>
+
           <div className="space-y-4">
-            {recentComments.map((comment, index) => (
-              <div 
-                key={`${comment.id}-${index}`}
-                className="p-3 rounded-lg bg-white/[0.02] border border-white/10 hover:border-primary/30 hover:bg-white/[0.05] transition-all"
-                style={{
-                  animation: index === 0 ? 'slideIn 0.5s ease-out' : 'none'
-                }}
+            {recentes.slice(0, 20).map((c, i) => (
+              <div
+                key={i}
+                className="p-3 rounded-lg bg-white/[0.02] border border-white/10 hover:bg-white/[0.05] hover:border-primary/30 transition-all"
               >
                 <div className="flex items-start gap-3">
-                  <Avatar className="w-12 h-12 border-2 border-primary/20">
-                    <AvatarFallback className="text-sm bg-primary/20 text-white font-semibold">
-                      {comment.avatar}
+                  <Avatar className="w-12 h-12 border-primary/20 border-2">
+                    <AvatarFallback className="bg-primary/20 text-white font-semibold">
+                      {getInitials(c.username)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm">{comment.user}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">{comment.time}</span>
+
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-primary font-semibold text-sm">
+                        @{c.username}
+                      </span>
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {c.data}
+                      </span>
                     </div>
-                    <p className={`text-sm ${getSentimentColor(comment.sentiment)}`}>
-                      {comment.comment}
+
+                    <p
+                      className={`text-sm ${getSentimentColor(c.sentimento)}`}
+                    >
+                      {c.comentario}
                     </p>
                   </div>
                 </div>

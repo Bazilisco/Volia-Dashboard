@@ -1,63 +1,60 @@
+// src/components/MetricCard.tsx
+
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import { LineChart, Line, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, ResponsiveContainer } from "recharts";
 
 interface MetricCardProps {
   title: string;
   value: string | number;
-  change: number;
   icon: any;
-  trendData?: number[]; // ✅ ADICIONADO
+  trendData?: number[];
 }
 
 export function MetricCard({
   title,
   value,
-  change,
   icon: Icon,
   trendData = [],
 }: MetricCardProps) {
+  const chartData = trendData.map((v) => ({ value: v }));
+
   return (
-    <Card className="p-5 bg-white/[0.02] border border-white/10 rounded-2xl shadow-xl backdrop-blur-md">
+    <Card className="p-5 bg-white/[0.02] border border-white/10 rounded-2xl shadow-xl backdrop-blur-md relative overflow-hidden">
+
+      {/* ICON */}
       <div className="flex items-start justify-between">
-        {/* ÍCONE */}
         <div className="p-3 rounded-xl bg-primary/10 text-primary">
           <Icon size={20} />
         </div>
-
-        {/* VARIAÇÃO */}
-        <span
-          className={cn(
-            "text-sm font-semibold",
-            change >= 0 ? "text-green-400" : "text-red-400"
-          )}
-        >
-          {change >= 0 ? "+" : ""}
-          {change}%
-        </span>
       </div>
 
-      {/* TÍTULO */}
+      {/* TITLE */}
       <h3 className="text-sm text-muted-foreground mt-4">{title}</h3>
 
-      {/* VALOR */}
+      {/* VALUE */}
       <p className="text-3xl font-bold tracking-tight mt-1">{value}</p>
 
-      {/* 🔥 MINI GRÁFICO REAL */}
+      {/* MINI GRAPH */}
       {trendData.length > 0 && (
-        <div className="h-12 mt-4">
+        <div className="h-14 mt-4 w-full pointer-events-none">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={trendData.map((v) => ({ value: v }))}
-            >
-              <Line
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="miniGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(168, 85, 247, 0.6)" />
+                  <stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
+                </linearGradient>
+              </defs>
+
+              <Area
                 type="monotone"
                 dataKey="value"
-                stroke="#8B5CF6"
-                strokeWidth={2}
+                stroke="#A855F7"
+                fill="url(#miniGradient)"
+                strokeWidth={2.4}
                 dot={false}
               />
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       )}
